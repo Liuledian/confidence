@@ -7,6 +7,7 @@ from torch_scatter import scatter_add
 
 
 def maybe_num_nodes(index, num_nodes=None):
+    # index: Tensor [2, num_nodes]
     return index.max().item() + 1 if num_nodes is None else num_nodes
 
 
@@ -14,9 +15,10 @@ def add_remaining_self_loops(edge_index,
                              edge_weight=None,
                              fill_value=1,
                              num_nodes=None):
+    # num_nodes = x.size(0)
     num_nodes = maybe_num_nodes(edge_index, num_nodes)
     row, col = edge_index
-
+    # find the loops that originally exists
     mask = row != col
     inv_mask = 1 - mask
     loop_weight = torch.full(
@@ -26,6 +28,7 @@ def add_remaining_self_loops(edge_index,
         device=edge_index.device)
 
     if edge_weight is not None:
+        # numel: return the number of elements
         assert edge_weight.numel() == edge_index.size(1)
         remaining_edge_weight = edge_weight[inv_mask]
         if remaining_edge_weight.numel() > 0:
@@ -47,6 +50,7 @@ class NewSGConv(SGConv):
     # allow negative edge weights
     @staticmethod
     def norm(edge_index, num_nodes, edge_weight, improved=False, dtype=None):
+        # num_nodes = x.size(0)
         if edge_weight is None:
             edge_weight = torch.ones((edge_index.size(1),),
                                      dtype=dtype,
@@ -56,6 +60,7 @@ class NewSGConv(SGConv):
         edge_index, edge_weight = add_remaining_self_loops(
             edge_index, edge_weight, fill_value, num_nodes)
         row, col = edge_index
+        # scatter_add_ on zeros
         deg = scatter_add(torch.abs(edge_weight), row, dim=0, dim_size=num_nodes)
         deg_inv_sqrt = deg.pow(-0.5)
         deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0
@@ -112,6 +117,7 @@ class SymSimGCNNet(torch.nn.Module):
         self.xs, self.ys = torch.tril_indices(self.num_nodes, self.num_nodes, offset=0)
         edge_weight = edge_weight.reshape(self.num_nodes, self.num_nodes)[
             self.xs, self.ys]  # strict lower triangular values
+        # edge_weight can be a learnable parameter, so it has to be constructed before forward()
         self.edge_weight = nn.Parameter(edge_weight, requires_grad=learn_edge_weight)
         self.dropout = dropout
         self.conv1 = NewSGConv(num_features=num_features, num_classes=num_hiddens[0], K=K)
@@ -126,6 +132,7 @@ class SymSimGCNNet(torch.nn.Module):
         edge_weight[self.xs.to(edge_weight.device), self.ys.to(edge_weight.device)] = self.edge_weight
         edge_weight = edge_weight + edge_weight.transpose(1, 0) - torch.diag(
             edge_weight.diagonal())  # copy values from lower tri to upper tri
+        # edge_weight [batch_size*num_nodes*num_nodes,]
         edge_weight = edge_weight.reshape(-1).repeat(batch_size)
         x = F.relu(self.conv1(x, edge_index, edge_weight))
 
