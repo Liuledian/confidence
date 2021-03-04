@@ -2,19 +2,10 @@ import numpy as np
 import torch
 import os
 import sys
+from scipy.stats import norm
 from tqdm import tqdm
 from torch_geometric.data import InMemoryDataset, Data, DataLoader
-
-
-subject_name_list = ['wuxin','diaoyuqi','zhouxiaozhen','liqinchao','litian','fengjialu','luotian',
-                       'liaoruosong','wangjian','lijie','wangyajie','songkunjie','huangzhongyu','wangzhiqi']
-
-DE_dir_template = "/home/PublicDir/liuledian/data/DE/{task}/DE_feature/{subject}/{fold}"
-DE_data_template = DE_dir_template + "/{phase}_data.npy"
-DE_label_template = DE_dir_template + "/{phase}_label.npy"
-root_template = "/home/PublicDir/liuledian/data/graph_sub_dep/{task}/{subject}/{fold}/{phase}"
-n_channels = 62
-n_bands = 5
+from  config import *
 
 
 class SubjectDependentDataset(InMemoryDataset):

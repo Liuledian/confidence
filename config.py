@@ -1,12 +1,29 @@
-import os
-# m = os.listdir(r"D:\data_preprocessed_200hz_filter\data")
-# print(m)
+import logging
 
-subject_names = ['diaoyuqi', 'fengjialu', 'guoqianyu', 'huangzhongyu', 'jiangting',
-                 'liaoruosong', 'lijie', 'liqinchao', 'litian', 'liuwen', 'luotian',
-                 'luyewangqing', 'quyuqi', 'songkunjie', 'wangjian', 'wangyajie', 'wangzhiqi',
-                 'wuxin', 'yudalong', 'zhouxiaozhen']
-data_file_template = "D:/results/{task}/fea_smoothed/feature/corr/{threshold:.2f}/{fea}/{subject}_{session}.mat"
-label_file_template = "D:/data_preprocessed_200hz_filter/label/{subject}/{session}/{task}/label.mat"
-n_sessions = 2
+
+def get_logger():
+    l = logging.getLogger()
+    fh = logging.FileHandler(log_file)
+    sh = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s : %(message)s')
+    fh.setFormatter(formatter)
+    sh.setFormatter(formatter)
+    l.addHandler(fh)
+    l.addHandler(sh)
+    l.setLevel(logging.NOTSET)
+    return l
+
+
+subject_name_list = ['wuxin', 'diaoyuqi', 'zhouxiaozhen', 'liqinchao', 'litian', 'fengjialu', 'luotian',
+                     'liaoruosong', 'wangjian', 'lijie', 'wangyajie', 'songkunjie', 'huangzhongyu', 'wangzhiqi']
+DE_dir_template = "/home/PublicDir/liuledian/data/DE/{task}/DE_feature/{subject}/{fold}"
+DE_data_template = DE_dir_template + "/{phase}_data.npy"
+DE_label_template = DE_dir_template + "/{phase}_label.npy"
+root_template = "/home/PublicDir/liuledian/data/graph_sub_dep/{task}/{subject}/{fold}/{phase}"
+n_channels = 62
 n_bands = 5
+label_types = ['hard', 'soft', 'numeric']
+adj_types = ['uniform', 'RGNN', 'corr']
+seed_num = 0
+log_file = "/home/PublicDir/liuledian/log/confidence.log"
+logger = get_logger()
