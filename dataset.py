@@ -4,8 +4,8 @@ import os
 import sys
 from scipy.stats import norm
 from tqdm import tqdm
-from torch_geometric.data import InMemoryDataset, Data, DataLoader
-from  config import *
+from torch_geometric.data import InMemoryDataset, Data
+from config import *
 
 
 class SubjectDependentDataset(InMemoryDataset):

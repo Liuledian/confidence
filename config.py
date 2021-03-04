@@ -1,4 +1,5 @@
 import logging
+import torch
 
 
 def get_logger():
@@ -20,10 +21,13 @@ DE_dir_template = "/home/PublicDir/liuledian/data/DE/{task}/DE_feature/{subject}
 DE_data_template = DE_dir_template + "/{phase}_data.npy"
 DE_label_template = DE_dir_template + "/{phase}_label.npy"
 root_template = "/home/PublicDir/liuledian/data/graph_sub_dep/{task}/{subject}/{fold}/{phase}"
+ckpt_dir = "/home/PublicDir/liuledian/ckpt"
 n_channels = 62
 n_bands = 5
+n_classes = {'hard': 5, 'soft': 5, 'numeric': 1}
 label_types = ['hard', 'soft', 'numeric']
 adj_types = ['uniform', 'RGNN', 'corr']
 seed_num = 0
+device = torch.device('cuda')
 log_file = "/home/PublicDir/liuledian/log/confidence.log"
 logger = get_logger()
