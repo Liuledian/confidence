@@ -1,4 +1,5 @@
 from dataset import SubjectDependentDataset
+import torch.nn.functional as F
 from torch_geometric.data import DataLoader
 from model import SymSimGCNNet
 from config import *
@@ -8,6 +9,7 @@ import torch
 
 
 def distribution_label(y, std=1):
+    # todo y is tensor
     x = np.linspace(0, 4, 5)
     p = norm.pdf(x, y, std)
     p = np.exp(p) / np.sum(np.exp(p))
@@ -15,37 +17,98 @@ def distribution_label(y, std=1):
 
 
 def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge, lambda1,
-               domain_adaptation, lambda2, label_type, model_ckpt=None):
+               domain_adaptation, lambda2, label_type, ckpt_save_name, ckpt_load=None):
+    # parameter sanity check
     if label_type not in label_types:
         raise Exception("undefined label_type")
     if adj_type not in adj_types:
         raise Exception("undefined adj_type")
 
+    # construct model
     edge_weight = initial_adjacency_matrix(adj_type)
     model = SymSimGCNNet(n_channels, learn_edge, edge_weight, n_bands, [z_dim], n_classes[label_type],
                          K, dropout, domain_adaptation)
-    epoch = 0
-    if model_ckpt is not None:
-        ckpt = torch.load(model_ckpt)
-        epoch = model_ckpt["epoch"]
-        if epoch >= n_epochs:
+    last_epoch = 0
+    if ckpt_load is not None:
+        ckpt = torch.load(ckpt_load)
+        last_epoch = ckpt_load["epoch"]
+        if last_epoch >= n_epochs:
             raise Exception("loaded model have trained >= n_epochs")
-        state_dict = model_ckpt["state_dict"]
+        state_dict = ckpt_load["state_dict"]
         model.load_state_dict(state_dict)
     model.to(device)
 
+    # prepare dataloader and optimizer
     logger.info("tr_dataset: {}".format(tr_dataset))
     logger.info("te_dataset: {}".format(te_dataset))
-    logger.info("training start from epoch {}".format(epoch))
+    logger.info("training start from epoch {}".format(last_epoch))
     tr_loader = DataLoader(tr_dataset, batch_size, True)
     te_loader = DataLoader(te_dataset, batch_size, True)
     optimizer = torch.optim.Adam(model.parameters(), lr)
-    for ep in range(epoch + 1, n_epochs + 1):
+    for ep in range(last_epoch + 1, n_epochs + 1):
         model.train()
-        for data in tr_loader:
-            pass
+        loss_all = 0
+        reverse_scale = 2 / (1 + np.exp(-10 * ep / n_epochs)) - 1
+        for tr_data in tr_loader:
+            tr_data = tr_data.to(device)
+            output, domain_output = model(tr_data, reverse_scale)
+            print(label_type, "output shape", output.shape, "data.y shape", tr_data.y.shape)
+            # classification loss
+            if label_type == "hard":
+                loss = F.cross_entropy(output, tr_data.y, )
+            elif label_type == "soft":
+
+                loss = - distribution_label(tr_data.y) * F.log_softmax(output, dim=1)
+                loss = torch.mean(torch.sum(loss, dim=1))
+            else:
+                loss = F.mse_loss(output, tr_data.y)
+            # l1 regularization loss
+            if learn_edge:
+                loss += lambda1 * torch.sum(torch.abs(model.edge_weight))
+            # domain adaptation loss
+            if domain_adaptation:
+                # tr_data.x: [num_graph * n_channels, feature_dim]
+                n_nodes = len(tr_data.x)
+                loss += lambda2 * F.cross_entropy(domain_output, torch.zeros(n_nodes))
+                te_indices = torch.randint(0, len(te_dataset), tr_data.num_graphs)
+                te_data = te_dataset[te_indices]
+                _, te_domain_output = model(te_data, reverse_scale)
+                loss += lambda2 * F.cross_entropy(te_domain_output, torch.ones(n_nodes))
+
+            loss_all += loss.item() * tr_data.num_graphs
+            # optimize the model
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        # evaluate the model
+        eval_acc = evaluate_RGNN(model, te_dataset, label_type)
+        logger.info("epoch: {}; loss: {}; eval acc; {}".format(ep, loss_all/len(tr_dataset), eval_acc))
+
+    # save model checkpoint
+    checkpoint = {"epoch": n_epochs, "state_dict": model.state_dict()}
+    torch.save(checkpoint, ckpt_dir + ckpt_save_name)
 
 
+def evaluate_RGNN(model, te_dataset, label_type):
+    assert label_type in label_types
+    model.eval()
+    n_correct = 0
+    te_loader = DataLoader(te_dataset)
+    with torch.no_grad():
+        for te_data in te_loader:
+            te_data = te_data.to(device)
+            output, _ = model(te_data)
+            if label_type == "hard" or label_type == "soft":
+                pred = torch.argmax(output, dim=1)
+                n_correct += torch.sum(pred == te_data.y).item()
+            else:
+                sep = torch.Tensor([-2, -1, 0, 1, 2])
+                sep = sep.repeat(len(te_data.y), 1)
+                diff = torch.abs(sep.t() - te_data.y)
+                pred = torch.argmin(diff, dim=0)
+                n_correct += torch.sum(pred == te_data.y).item()
+
+    return n_correct / len(te_dataset)
 
 
 def initial_adjacency_matrix(adj_type):
@@ -57,10 +120,10 @@ def initial_adjacency_matrix(adj_type):
         return adj
 
 
-def evaluate():
-    pass
-
-
 if __name__ == '__main__':
     torch.manual_seed(seed_num)
-    pass
+    l = [1,2,3]
+    il = iter(l)
+    for j in range(10):
+        for e in il:
+            print(e)
