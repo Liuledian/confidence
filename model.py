@@ -20,7 +20,7 @@ def add_remaining_self_loops(edge_index,
     row, col = edge_index
     # find the loops that originally exists
     mask = row != col
-    inv_mask = 1 - mask
+    inv_mask = ~mask
     loop_weight = torch.full(
         (num_nodes,),
         fill_value,

@@ -18,6 +18,7 @@ class SubjectDependentDataset(InMemoryDataset):
             root_template.format(task=task, subject=subject_name, fold=fold, phase=phase),
             transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
+        logger.info("{} {} {} {} dataset is loaded".format(task, subject_name, fold, phase))
 
     @property
     def raw_file_names(self):
@@ -41,14 +42,14 @@ class SubjectDependentDataset(InMemoryDataset):
         m, n = data.shape
         assert m == label.shape[0]
         for i in tqdm(range(m)):
-            x = np.reshape(data[i, :], [n_channels, n_bands])
-            y = label[i]
-            edge_index = [[i, j] for i in range(n_channels) for j in range(n_channels) if i != j]
-            edge_index = torch.tensor(edge_index, dtype=torch.long).reshape((2, -1))
-            assert edge_index.shape[1] == n_channels * (n_channels - 1)
+            x = torch.tensor(np.reshape(data[i, :], [n_channels, n_bands]), dtype=torch.float)
+            y = torch.tensor([label[i]], dtype=torch.long)
+            edge_index = [[i, j] for i in range(n_channels) for j in range(n_channels)]
+            edge_index = torch.tensor(edge_index, dtype=torch.long).t()
+            assert edge_index.shape[1] == n_channels * n_channels
             graph_data = Data(x=x, edge_index=edge_index, y=y)
             data_list.append(graph_data)
-
+        print(len(data_list))
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]
 
