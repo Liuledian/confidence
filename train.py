@@ -44,6 +44,8 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
             raise Exception("loaded model have trained >= n_epochs")
         state_dict = ckpt_load["state_dict"]
         model.load_state_dict(state_dict)
+    # use multiple GPU
+    model = torch.nn.DataParallel(model, device_ids=device_ids)
     model.to(device)
     print(model)
 
@@ -89,7 +91,7 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
             optimizer.step()
         # evaluate the model
         eval_acc = evaluate_RGNN(model, te_dataset, label_type)
-        logger.info("epoch: {:>4}; loss: {}; eval acc {}".format(ep, loss_all/len(tr_dataset), eval_acc))
+        logger.info("epoch: {:>4}; loss: {:<10}; eval acc {:<10}".format(ep, loss_all/len(tr_dataset), eval_acc))
 
     # save model checkpoint
     logger.info(model.edge_weight)
@@ -158,7 +160,7 @@ def train_RGNN_for_all():
         eval_acc_all = np.array(eval_acc_all)
         eval_acc_mean = np.mean(eval_acc_all)
         eval_acc_std = np.std(eval_acc_all)
-        logger.critical("task: {:>10}; acc_mean: {}; acc_std {}".format(task, eval_acc_mean, eval_acc_std))
+        logger.critical("task: {:>10}; acc_mean: {:<10}; acc_std {:<10}".format(task, eval_acc_mean, eval_acc_std))
 
 
 if __name__ == '__main__':

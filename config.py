@@ -31,5 +31,6 @@ adj_types = ['uniform', 'RGNN', 'corr']
 tasks = ['animal', 'planeship']
 seed_num = 0
 device = torch.device('cuda')
+device_ids = [0, 1]
 log_file = "/home/PublicDir/liuledian/log/confidence.log"
 logger = get_logger()
