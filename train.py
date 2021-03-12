@@ -45,7 +45,7 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
         state_dict = ckpt_load["state_dict"]
         model.load_state_dict(state_dict)
     # use multiple GPU
-    model = torch.nn.DataParallel(model, device_ids=device_ids)
+    # model = torch.nn.DataParallel(model, device_ids=device_ids)
     model.to(device)
     print(model)
 
