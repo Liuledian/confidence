@@ -89,12 +89,13 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
             optimizer.step()
         # evaluate the model
         eval_acc = evaluate_RGNN(model, te_dataset, label_type)
-        logger.info("epoch: {}; loss: {}; eval acc {}".format(ep, loss_all/len(tr_dataset), eval_acc))
+        logger.info("epoch: {:>4}; loss: {}; eval acc {}".format(ep, loss_all/len(tr_dataset), eval_acc))
 
     # save model checkpoint
     logger.info(model.edge_weight)
     checkpoint = {"epoch": n_epochs, "state_dict": model.state_dict()}
     torch.save(checkpoint, ckpt_dir + '/' + ckpt_save_name)
+    return eval_acc
 
 
 def evaluate_RGNN(model, te_dataset, label_type):
@@ -128,13 +129,13 @@ def initial_adjacency_matrix(adj_type):
         return torch.tensor(adj, dtype=torch.float)
 
 
-if __name__ == '__main__':
+def train_RGNN_for_all():
     torch.manual_seed(seed_num)
-    n_epochs = 5000
+    n_epochs = 1000
     batch_size = 16
     K = 2
     dropout = 0.7
-    lr = 0.0001
+    lr = 0.001
     z_dim = 5
     adj_type = "uniform"
     learn_edge = True
@@ -143,13 +144,23 @@ if __name__ == '__main__':
     lambda_dat = 0.001
     label_type = "hard"
     domain_adaptation = None
-    task = "animal"
-    subject_name = "diaoyuqi"
-    fold = 0
-    ckpt_save_name = "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
-    ckpt_load = None
-    tr_dataset = SubjectDependentDataset(task, subject_name, 0, "train")
-    te_dataset = SubjectDependentDataset(task, subject_name, 0, "test")
-    train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge,
-               lambda1, lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name, ckpt_load)
+    for task in tasks:
+        eval_acc_all = []
+        for subject_name in subject_name_list:
+            for fold in range(n_folds):
+                ckpt_save_name = "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
+                ckpt_load = None
+                tr_dataset = SubjectDependentDataset(task, subject_name, fold, "train")
+                te_dataset = SubjectDependentDataset(task, subject_name, fold, "test")
+                eval_acc = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge,
+                           lambda1, lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name, ckpt_load)
+                eval_acc_all.append(eval_acc_all)
+        eval_acc_all = np.array(eval_acc_all)
+        eval_acc_mean = np.mean(eval_acc_all)
+        eval_acc_std = np.std(eval_acc_all)
+        logger.critical("task: {:>10}; acc_mean: {}; acc_std {}".format(task, eval_acc_mean, eval_acc_std))
+
+
+if __name__ == '__main__':
+    train_RGNN_for_all()
 
