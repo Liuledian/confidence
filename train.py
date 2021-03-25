@@ -1,10 +1,12 @@
 from dataset import SubjectDependentDataset
 import torch.nn.functional as F
-from torch_geometric.data import DataLoader
+from torch_geometric.data import DataListLoader
+from torch_geometric.nn import DataParallel
 from model import SymSimGCNNet
 from config import *
 from scipy.stats import norm
 import numpy as np
+import math
 import torch
 
 soft_label_table = None
@@ -45,46 +47,49 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
         state_dict = ckpt_load["state_dict"]
         model.load_state_dict(state_dict)
     # use multiple GPU
-    # model = torch.nn.DataParallel(model, device_ids=device_ids)
-    model.to(device)
+    model = DataParallel(model).to(device)
     print(model)
 
     # prepare dataloader and optimizer
     logger.info("tr_dataset: {}".format(tr_dataset))
     logger.info("te_dataset: {}".format(te_dataset))
     logger.info("training start from epoch {}".format(last_epoch))
-    tr_loader = DataLoader(tr_dataset, batch_size, True)
+    tr_loader = DataListLoader(tr_dataset, batch_size, True)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=lambda2)
     for ep in range(last_epoch + 1, n_epochs + 1):
         model.train()
         loss_all = 0
-        reverse_scale = 2 / (1 + np.exp(-10 * ep / n_epochs)) - 1
-        for tr_data in tr_loader:
-            tr_data = tr_data.to(device)
-            output, domain_output = model(tr_data, reverse_scale)
-            # print(label_type, "output shape", output.shape, "data.y shape", tr_data.y.shape)
+        reverse_scale = 2 / (1 + math.exp(-10 * ep / n_epochs)) - 1
+        for tr_data_list in tr_loader:
+            if domain_adaptation == 'RevGrad':
+                model.module.alpha = reverse_scale
+            output, domain_output = model(tr_data_list)
+            print('output', output, 'domain_output', domain_output)
             # classification loss
+            y = torch.cat([data.y for data in tr_data_list]).to(output.device)
             if label_type == "hard":
-                loss = F.cross_entropy(output, tr_data.y)
+                loss = F.cross_entropy(output, y)
             elif label_type == "soft":
-                loss = - distribution_label(tr_data.y) * F.log_softmax(output, dim=1)
+                loss = - distribution_label(y) * F.log_softmax(output, dim=1)
                 loss = torch.mean(torch.sum(loss, dim=1))
             else:
-                loss = F.mse_loss(output, tr_data.y - 2)
+                loss = F.mse_loss(output, y - 2)
             # l1 regularization loss
             if learn_edge:
-                loss += lambda1 * torch.sum(torch.abs(model.edge_weight))
+                loss += lambda1 * torch.sum(torch.abs(model.module.edge_weight))
             # domain adaptation loss
             if domain_adaptation:
                 # tr_data.x: [num_graph * n_channels, feature_dim]
-                n_nodes = len(tr_data.x)
-                loss += lambda_dat * F.cross_entropy(domain_output, torch.zeros(n_nodes))
-                te_indices = torch.randint(0, len(te_dataset), tr_data.num_graphs)
+                n_nodes = domain_output.size(0)
+                print('n_nodes', n_nodes)
+                print('len(tr_data_list)', len(tr_data_list))
+                loss += lambda_dat * F.cross_entropy(domain_output, torch.zeros(n_nodes).cuda())
+                te_indices = torch.randint(0, len(te_dataset), len(tr_data_list))
                 te_data = te_dataset[te_indices]
-                _, te_domain_output = model(te_data, reverse_scale)
-                loss += lambda_dat * F.cross_entropy(te_domain_output, torch.ones(n_nodes))
+                _, te_domain_output = model(te_data)
+                loss += lambda_dat * F.cross_entropy(te_domain_output, torch.ones(n_nodes).cuda())
 
-            loss_all += loss.item() * tr_data.num_graphs
+            loss_all += loss.item() * tr_data_list.num_graphs
             # optimize the model
             optimizer.zero_grad()
             loss.backward()
@@ -107,7 +112,7 @@ def evaluate_RGNN(model, te_dataset, label_type):
     te_loader = DataLoader(te_dataset)
     with torch.no_grad():
         for te_data in te_loader:
-            te_data = te_data.to(device)
+            te_data = te_data.cuda()
             output, _ = model(te_data)
             if label_type == "hard" or label_type == "soft":
                 pred = torch.argmax(output, dim=1)
@@ -155,8 +160,8 @@ def train_RGNN_for_all():
                 tr_dataset = SubjectDependentDataset(task, subject_name, fold, "train")
                 te_dataset = SubjectDependentDataset(task, subject_name, fold, "test")
                 eval_acc = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge,
-                           lambda1, lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name, ckpt_load)
-                eval_acc_all.append(eval_acc_all)
+                                      lambda1, lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name, ckpt_load)
+                eval_acc_all.append(eval_acc)
         eval_acc_all = np.array(eval_acc_all)
         eval_acc_mean = np.mean(eval_acc_all)
         eval_acc_std = np.std(eval_acc_all)

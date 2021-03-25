@@ -51,14 +51,14 @@ class NewSGConv(SGConv):
     @staticmethod
     def norm(edge_index, num_nodes, edge_weight, improved=False, dtype=None):
         # num_nodes = x.size(0)
-        if edge_weight is None:
-            edge_weight = torch.ones((edge_index.size(1),),
-                                     dtype=dtype,
-                                     device=edge_index.device)
+        # if edge_weight is None:
+        #     edge_weight = torch.ones((edge_index.size(1),),
+        #                              dtype=dtype,
+        #                              device=edge_index.device)
 
-        fill_value = 1 if not improved else 2
-        edge_index, edge_weight = add_remaining_self_loops(
-            edge_index, edge_weight, fill_value, num_nodes)
+        # fill_value = 1 if not improved else 2
+        # edge_index, edge_weight = add_remaining_self_loops(
+        #     edge_index, edge_weight, fill_value, num_nodes)
         row, col = edge_index
         # scatter_add_ on zeros
         deg = scatter_add(torch.abs(edge_weight), row, dim=0, dim_size=num_nodes)
@@ -124,22 +124,32 @@ class SymSimGCNNet(torch.nn.Module):
         self.fc = nn.Linear(num_hiddens[0], num_classes)
         if self.domain_adaptation in ["RevGrad"]:
             self.domain_classifier = nn.Linear(num_hiddens[0], 2)
+            self.alpha = None
 
-    def forward(self, data, alpha=0):
+    def forward(self, data):
+        print('Inside Model:  num graphs: {}, device: {}'.format(
+            data.num_graphs, data.batch.device))
+        print('in forward self.edge_weight', self.edge_weight.device)
+        print('in forward xs', self.xs.device)
         batch_size = len(data.y)
         x, edge_index = data.x, data.edge_index
-        edge_weight = torch.zeros((self.num_nodes, self.num_nodes), device=edge_index.device)
-        edge_weight[self.xs.to(edge_weight.device), self.ys.to(edge_weight.device)] = self.edge_weight
+        print('data.x in forward', x.device)
+        print('data.edge_index', edge_index.device)
+        edge_weight = torch.zeros((self.num_nodes, self.num_nodes)).cuda()
+        print('in forward edge weight', edge_weight.device)
+        edge_weight[self.xs, self.ys] = self.edge_weight
         edge_weight = edge_weight + edge_weight.transpose(1, 0) - torch.diag(
             edge_weight.diagonal())  # copy values from lower tri to upper tri
         # edge_weight [batch_size*num_nodes*num_nodes,]
         edge_weight = edge_weight.reshape(-1).repeat(batch_size)
+        print('in forward edge weight after slice', edge_weight.device)
+        print('in forward edge_index', edge_index.device)
         x = F.relu(self.conv1(x, edge_index, edge_weight))
 
         # domain classification
         domain_output = None
         if self.domain_adaptation in ["RevGrad"]:
-            reverse_x = ReverseLayerF.apply(x, alpha)
+            reverse_x = ReverseLayerF.apply(x, self.alpha)
             domain_output = self.domain_classifier(reverse_x)
         x = global_add_pool(x, data.batch, size=batch_size)
         x = F.dropout(x, p=self.dropout, training=self.training)
