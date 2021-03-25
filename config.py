@@ -5,13 +5,18 @@ import torch
 def get_logger():
     l = logging.getLogger()
     fh = logging.FileHandler(log_file)
+    fh_cri = logging.FileHandler(log_file_critical)
     sh = logging.StreamHandler()
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s : %(message)s')
     fh.setFormatter(formatter)
+    fh_cri.setFormatter(formatter)
     sh.setFormatter(formatter)
+    fh.setLevel(logging.NOTSET)
+    sh.setLevel(logging.NOTSET)
+    fh_cri.setLevel(logging.CRITICAL)
+    l.addHandler(fh_cri)
     l.addHandler(fh)
     l.addHandler(sh)
-    l.setLevel(logging.NOTSET)
     return l
 
 
@@ -33,4 +38,5 @@ seed_num = 0
 device_ids = [0, 1]
 device = device_ids[0]
 log_file = "/home/PublicDir/liuledian/log/confidence.log"
+log_file_critical = "/home/PublicDir/liuledian/log/critical.log"
 logger = get_logger()

@@ -5,6 +5,7 @@ from torch_geometric.nn import DataParallel
 from model import SymSimGCNNet
 from config import *
 from scipy.stats import norm
+import sklearn
 import numpy as np
 import math
 import torch
@@ -50,22 +51,29 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
     model = DataParallel(model).to(device)
     print(model)
 
-    # prepare dataloader and optimizer
+    # prepare dataloader
     logger.info("tr_dataset: {}".format(tr_dataset))
     logger.info("te_dataset: {}".format(te_dataset))
     logger.info("training start from epoch {}".format(last_epoch))
     tr_loader = DataListLoader(tr_dataset, batch_size, True)
+    # prepare optimizer
+    print('model param', model.parameters())
     optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=lambda2)
     for ep in range(last_epoch + 1, n_epochs + 1):
         model.train()
         loss_all = 0
+        eval_acc_list = []
+        macro_f1_list = []
         reverse_scale = 2 / (1 + math.exp(-10 * ep / n_epochs)) - 1
+        if domain_adaptation == 'RevGrad':
+            model.module.alpha = reverse_scale
+        # iterate over all graphs
         for tr_data_list in tr_loader:
-            if domain_adaptation == 'RevGrad':
-                model.module.alpha = reverse_scale
+            # output shape (len(tr_data_list), 5 or 1)
             output, domain_output = model(tr_data_list)
             print('output', output, 'domain_output', domain_output)
             # classification loss
+            # y shape (len(tr_data_list), )
             y = torch.cat([data.y for data in tr_data_list]).to(output.device)
             if label_type == "hard":
                 loss = F.cross_entropy(output, y)
@@ -89,42 +97,53 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
                 _, te_domain_output = model(te_data)
                 loss += lambda_dat * F.cross_entropy(te_domain_output, torch.ones(n_nodes).cuda())
 
-            loss_all += loss.item() * tr_data_list.num_graphs
+            loss_all += loss.item() * len(tr_data_list)
             # optimize the model
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         # evaluate the model
-        eval_acc = evaluate_RGNN(model, te_dataset, label_type)
-        logger.info("epoch: {:>4}; loss: {:<10}; eval acc {:<10}".format(ep, loss_all/len(tr_dataset), eval_acc))
+        accuracy, macro_f1_score, micro_f1_score = evaluate_RGNN(model, te_dataset, label_type)
+        eval_acc_list.append(accuracy, ep)
+        macro_f1_list.append(macro_f1_score)
+        train_acc, _, _ = evaluate_RGNN(model, tr_dataset, label_type)
+        logger.info("epoch: {:>4}; loss: {:<8}; train acc: {:<8}; eval acc: {:<8}; macro f1: {:<8}; micro f1: {:<8}"
+                    .format(ep, loss_all/len(tr_dataset), train_acc, accuracy, macro_f1_score, micro_f1_score))
 
     # save model checkpoint
     logger.info(model.edge_weight)
     checkpoint = {"epoch": n_epochs, "state_dict": model.state_dict()}
     torch.save(checkpoint, ckpt_dir + '/' + ckpt_save_name)
-    return eval_acc
+    return eval_acc_list, macro_f1_list
 
 
 def evaluate_RGNN(model, te_dataset, label_type):
     assert label_type in label_types
     model.eval()
-    n_correct = 0
-    te_loader = DataLoader(te_dataset)
+    y_pred = []
+    y_true = []
+    te_loader = DataListLoader(te_dataset)
     with torch.no_grad():
-        for te_data in te_loader:
-            te_data = te_data.cuda()
-            output, _ = model(te_data)
+        for te_data_list in te_loader:
+            # output shape (len(te_data_list), 5 or 1)
+            output, _ = model(te_data_list)
+            y = torch.cat([data.y for data in te_data_list]).to(output.device)
+            y_true.extend(y.detach().cpu().numpy())
+            print('true y', y_true)
             if label_type == "hard" or label_type == "soft":
                 pred = torch.argmax(output, dim=1)
-                n_correct += torch.sum(pred == te_data.y).item()
+                y_pred.extend(pred.detach().cpu().numpy())
             else:
                 sep = torch.Tensor([-2, -1, 0, 1, 2])
-                sep = sep.repeat(len(te_data.y), 1)
-                diff = torch.abs(sep.t() - te_data.y)
+                sep = sep.repeat(len(te_data_list), 1)
+                diff = torch.abs(sep.t() - y)
                 pred = torch.argmin(diff, dim=0)
-                n_correct += torch.sum(pred == te_data.y).item()
+                y_pred.extend(pred.detach().cpu().numpy())
 
-    return n_correct / len(te_dataset)
+    macro_f1_score = sklearn.metrics.f1_score(y_true, y_pred, average='macro')
+    micro_f1_score = sklearn.metrics.f1_score(y_true, y_pred, average='micro')
+    accuracy = sklearn.metrics.accuracy_score(y_true, y_pred)
+    return accuracy, macro_f1_score, micro_f1_score
 
 
 def initial_adjacency_matrix(adj_type):
@@ -152,20 +171,54 @@ def train_RGNN_for_all():
     label_type = "hard"
     domain_adaptation = None
     for task in tasks:
-        eval_acc_all = []
+        acc_all_sub = []
+        f1_all_sub = []
         for subject_name in subject_name_list:
+            avg_acc_per_ep = np.zeros(n_epochs)
+            avg_f1_per_ep = np.zeros(n_epochs)
             for fold in range(n_folds):
                 ckpt_save_name = "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
                 ckpt_load = None
                 tr_dataset = SubjectDependentDataset(task, subject_name, fold, "train")
                 te_dataset = SubjectDependentDataset(task, subject_name, fold, "test")
-                eval_acc = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge,
-                                      lambda1, lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name, ckpt_load)
-                eval_acc_all.append(eval_acc)
-        eval_acc_all = np.array(eval_acc_all)
-        eval_acc_mean = np.mean(eval_acc_all)
-        eval_acc_std = np.std(eval_acc_all)
-        logger.critical("task: {:>10}; acc_mean: {:<10}; acc_std {:<10}".format(task, eval_acc_mean, eval_acc_std))
+                acc_list, f1_list = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout,
+                                               adj_type, learn_edge, lambda1, lambda2, domain_adaptation, lambda_dat,
+                                               label_type, ckpt_save_name, ckpt_load)
+                logger.critical('-' * 100)
+                logger.critical("task: {:>10}; subject: {:>15}; fold: {}".format(task, subject_name, fold))
+                logger.critical(acc_list)
+                logger.critical(f1_list)
+                avg_acc_per_ep += np.array(acc_list)
+                avg_f1_per_ep += np.array(f1_list)
+
+            # log average metrics over all 5 folds
+            avg_acc_per_ep /= n_folds
+            avg_f1_per_ep /= n_folds
+            max_avg_acc_idx = np.argmax(avg_acc_per_ep)
+            max_avg_f1_idx = np.argmax(avg_f1_per_ep)
+            logger.critical('=' * 100)
+            logger.critical("task: {:>10}; subject: {:>15}; max acc: ({}, {}); max f1: ({}, {})"
+                            .format(task, subject_name, max_avg_acc_idx + 1, avg_acc_per_ep[max_avg_acc_idx],
+                                    max_avg_f1_idx + 1, avg_f1_per_ep[max_avg_f1_idx]))
+            logger.critical(avg_acc_per_ep)
+            logger.critical(avg_f1_per_ep)
+            # record avg metric of a subject
+            acc_all_sub.append(avg_acc_per_ep[max_avg_acc_idx])
+            f1_all_sub.append(avg_f1_per_ep[max_avg_f1_idx])
+
+        # compute metrics for all subjects
+        acc_all_sub = np.array(acc_all_sub)
+        acc_mean = np.mean(acc_all_sub)
+        acc_std = np.std(acc_all_sub)
+        f1_all_sub = np.array(f1_all_sub)
+        f1_mean = np.mean(f1_all_sub)
+        f1_std = np.std(f1_all_sub)
+        # log average metrics over all sujects
+        logger.critical('*' * 100)
+        logger.critical("task: {:>10}; acc mean: {:<8}; acc_std {:<8}; f1 mean: {:<8}; f1 std: {:<8}"
+                        .format(task, acc_mean, acc_std, f1_mean, f1_std))
+        logger.critical(acc_all_sub)
+        logger.critical(f1_all_sub)
 
 
 if __name__ == '__main__':
