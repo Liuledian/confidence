@@ -1,9 +1,9 @@
 import logging
-import torch
 
 
 def get_logger():
     l = logging.getLogger()
+    l.setLevel(logging.NOTSET)
     fh = logging.FileHandler(log_file)
     fh_cri = logging.FileHandler(log_file_critical)
     sh = logging.StreamHandler()

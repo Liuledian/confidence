@@ -127,23 +127,14 @@ class SymSimGCNNet(torch.nn.Module):
             self.alpha = None
 
     def forward(self, data):
-        print('Inside Model:  num graphs: {}, device: {}'.format(
-            data.num_graphs, data.batch.device))
-        print('in forward self.edge_weight', self.edge_weight.device)
-        print('in forward xs', self.xs.device)
         batch_size = len(data.y)
         x, edge_index = data.x, data.edge_index
-        print('data.x in forward', x.device)
-        print('data.edge_index', edge_index.device)
         edge_weight = torch.zeros((self.num_nodes, self.num_nodes)).cuda()
-        print('in forward edge weight', edge_weight.device)
         edge_weight[self.xs, self.ys] = self.edge_weight
         edge_weight = edge_weight + edge_weight.transpose(1, 0) - torch.diag(
             edge_weight.diagonal())  # copy values from lower tri to upper tri
         # edge_weight [batch_size*num_nodes*num_nodes,]
         edge_weight = edge_weight.reshape(-1).repeat(batch_size)
-        print('in forward edge weight after slice', edge_weight.device)
-        print('in forward edge_index', edge_index.device)
         x = F.relu(self.conv1(x, edge_index, edge_weight))
 
         # domain classification
