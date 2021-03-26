@@ -8,6 +8,7 @@ from scipy.stats import norm
 import sklearn
 import numpy as np
 import math
+import sys
 import torch
 
 soft_label_table = None
@@ -28,7 +29,7 @@ def distribution_label(labels, std=1):
 
 
 def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge, lambda1,
-               lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name, ckpt_load=None):
+               lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name=None, ckpt_load=None):
     # log hyper-parameter
     logger.critical('batch_size {}, lr {}, z_dim {}, K {}, dropout {}, adj_type {}, learn_edge {}, lambda1, {}'
                     'lambda2 {}, domain_adaptation {}, lambda_dat {}, label_type {}'
@@ -54,7 +55,7 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
         state_dict = ckpt_load["state_dict"]
         model.load_state_dict(state_dict)
     # use multiple GPU
-    model = DataParallel(model, device_ids=device_ids).to(device)
+    model = DataParallel(model, device_ids=device_ids).cuda()
     logger.info(model)
 
     # prepare dataloader
@@ -129,8 +130,9 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
     # save model checkpoint
     logger.info(list(model.parameters()))
     logger.info(format_list(model.module.edge_weight.detach().cpu().numpy().flatten()))
-    checkpoint = {"epoch": n_epochs, "state_dict": model.state_dict()}
-    torch.save(checkpoint, ckpt_dir + '/' + ckpt_save_name)
+    if ckpt_save_name is not None:
+        checkpoint = {"epoch": n_epochs, "state_dict": model.state_dict()}
+        torch.save(checkpoint, ckpt_dir + '/' + ckpt_save_name)
     return eval_acc_list, macro_f1_list
 
 
@@ -182,9 +184,8 @@ def format_list(ls):
 
 
 def train_RGNN_for_all(dropout):
-    torch.manual_seed(seed_num)
     n_epochs = 500
-    batch_size = 32
+    batch_size = 16
     K = 2
     z_dim = 5
     #dropout = 0.7
@@ -205,7 +206,7 @@ def train_RGNN_for_all(dropout):
             avg_acc_per_ep = np.zeros(n_epochs)
             avg_f1_per_ep = np.zeros(n_epochs)
             for fold in range(n_folds):
-                ckpt_save_name = "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
+                ckpt_save_name = None  # "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
                 ckpt_load = None
                 tr_dataset = SubjectDependentDataset(task, subject_name, fold, "train")
                 te_dataset = SubjectDependentDataset(task, subject_name, fold, "test")
@@ -249,6 +250,9 @@ def train_RGNN_for_all(dropout):
 
 
 if __name__ == '__main__':
-    for dropout in [0.8, 0.9, 1.0]:
-        train_RGNN_for_all(dropout)
+    torch.manual_seed(seed_num)
+    dropout_list = [0.7, 0.8, 0.9, 1.0]
+    for i, dropout in enumerate(dropout_list):
+        if i % 2 == args.proc:
+            train_RGNN_for_all(dropout)
 
