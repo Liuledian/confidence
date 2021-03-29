@@ -122,7 +122,7 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
         accuracy, macro_f1_score = evaluate_RGNN(model, te_dataset, label_type)
         eval_acc_list.append(accuracy)
         macro_f1_list.append(macro_f1_score)
-        train_acc, _, _ = evaluate_RGNN(model, tr_dataset, label_type)
+        train_acc, _ = evaluate_RGNN(model, tr_dataset, label_type)
         logger.info('epoch: {:4d}; loss: {:9.5f}; train acc: {:9.5f}; eval acc: {:9.5f}; '
                     'macro f1: {:9.5f};'
                     .format(ep, loss_all/len(tr_dataset), train_acc, accuracy, macro_f1_score))
