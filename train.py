@@ -31,7 +31,7 @@ def distribution_label(labels, std=1):
 def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout, adj_type, learn_edge, lambda1,
                lambda2, domain_adaptation, lambda_dat, label_type, ckpt_save_name=None, ckpt_load=None):
     # log hyper-parameter
-    logger.critical('batch_size {}, lr {}, z_dim {}, K {}, dropout {}, adj_type {}, learn_edge {}, lambda1, {}'
+    logger.critical('batch_size {}, lr {}, z_dim {}, K {}, dropout {}, adj_type {}, learn_edge {}, lambda1 {},'
                     'lambda2 {}, domain_adaptation {}, lambda_dat {}, label_type {}'
                     .format(batch_size, lr, z_dim, K, dropout, adj_type, learn_edge, lambda1,
                             lambda2, domain_adaptation, lambda_dat, label_type))
@@ -55,7 +55,7 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
         state_dict = ckpt_load["state_dict"]
         model.load_state_dict(state_dict)
     # use multiple GPU
-    model = DataParallel(model, device_ids=device_ids).cuda()
+    model = DataParallel(model, device_ids=device_ids).to(device)
     logger.info(model)
 
     # prepare dataloader
@@ -119,13 +119,13 @@ def train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropo
             loss.backward()
             optimizer.step()
         # evaluate the model
-        accuracy, macro_f1_score, micro_f1_score = evaluate_RGNN(model, te_dataset, label_type)
+        accuracy, macro_f1_score = evaluate_RGNN(model, te_dataset, label_type)
         eval_acc_list.append(accuracy)
         macro_f1_list.append(macro_f1_score)
         train_acc, _, _ = evaluate_RGNN(model, tr_dataset, label_type)
         logger.info('epoch: {:4d}; loss: {:9.5f}; train acc: {:9.5f}; eval acc: {:9.5f}; '
-                    'macro f1: {:9.5f}; micro f1: {:9.5f}'
-                    .format(ep, loss_all/len(tr_dataset), train_acc, accuracy, macro_f1_score, micro_f1_score))
+                    'macro f1: {:9.5f};'
+                    .format(ep, loss_all/len(tr_dataset), train_acc, accuracy, macro_f1_score))
 
     # save model checkpoint
     logger.info(list(model.parameters()))
@@ -159,9 +159,9 @@ def evaluate_RGNN(model, te_dataset, label_type):
                 y_pred.extend(pred.detach().cpu().numpy())
 
     macro_f1_score = sklearn.metrics.f1_score(y_true, y_pred, average='macro')
-    micro_f1_score = sklearn.metrics.f1_score(y_true, y_pred, average='micro')
+    # micro_f1_score = sklearn.metrics.f1_score(y_true, y_pred, average='micro')
     accuracy = sklearn.metrics.accuracy_score(y_true, y_pred)
-    return accuracy, macro_f1_score, micro_f1_score
+    return accuracy, macro_f1_score
 
 
 def initial_adjacency_matrix(adj_type):
@@ -183,12 +183,12 @@ def format_list(ls):
     return result
 
 
-def train_RGNN_for_all(dropout):
-    n_epochs = 500
+def train_RGNN_for_all():
+    n_epochs = 1000
     batch_size = 16
     K = 2
     z_dim = 5
-    #dropout = 0.7
+    dropout = 0.7
     label_type = "hard"
     adj_type = "uniform"
     learn_edge = True
@@ -202,7 +202,7 @@ def train_RGNN_for_all(dropout):
         acc_all_sub = []
         f1_all_sub = []
         # Choose which subjects to run
-        for subject_name in subject_name_list[0:1]:
+        for subject_name in subject_name_list[0:2]:
             avg_acc_per_ep = np.zeros(n_epochs)
             avg_f1_per_ep = np.zeros(n_epochs)
             for fold in range(n_folds):
@@ -217,6 +217,7 @@ def train_RGNN_for_all(dropout):
                 logger.critical("task: {:>10}; subject: {:>15}; fold: {}".format(task, subject_name, fold))
                 logger.critical(format_list(acc_list))
                 logger.critical(format_list(f1_list))
+                logger.critical('-' * 100)
                 avg_acc_per_ep += np.array(acc_list)
                 avg_f1_per_ep += np.array(f1_list)
 
@@ -231,6 +232,7 @@ def train_RGNN_for_all(dropout):
                                     max_avg_f1_idx + 1, avg_f1_per_ep[max_avg_f1_idx]))
             logger.critical(format_list(avg_acc_per_ep))
             logger.critical(format_list(avg_f1_per_ep))
+            logger.critical('=' * 100)
             # record max avg metric of a subject
             acc_all_sub.append(avg_acc_per_ep[max_avg_acc_idx])
             f1_all_sub.append(avg_f1_per_ep[max_avg_f1_idx])
@@ -247,12 +249,14 @@ def train_RGNN_for_all(dropout):
         logger.critical("task: {:>10}; acc mean: {:9.5f}; acc_std {:9.5f}; f1 mean: {:9.5f}; f1 std: {:9.5f}"
                         .format(task, acc_mean, acc_std, f1_mean, f1_std))
         logger.critical(list(zip(acc_all_sub, f1_all_sub)))
+        logger.critical('*' * 100)
 
 
 if __name__ == '__main__':
     torch.manual_seed(seed_num)
-    dropout_list = [0.7, 0.8, 0.9, 1.0]
-    for i, dropout in enumerate(dropout_list):
-        if i % 2 == args.proc:
-            train_RGNN_for_all(dropout)
+    # dropout_list = [0.7, 0.8, 0.9, 1.0]
+    # for i, dropout in enumerate(dropout_list):
+    #     if i % 2 == args.proc:
+    #         train_RGNN_for_all(dropout)
+    train_RGNN_for_all()
 

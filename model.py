@@ -114,7 +114,7 @@ class SymSimGCNNet(torch.nn.Module):
         super(SymSimGCNNet, self).__init__()
         self.domain_adaptation = domain_adaptation
         self.num_nodes = num_nodes
-        self.xs, self.ys = torch.tril_indices(self.num_nodes, self.num_nodes, offset=0)
+        self.xs, self.ys = torch.tril_indices(self.num_nodes, self.num_nodes, offset=-1)
         edge_weight = edge_weight.reshape(self.num_nodes, self.num_nodes)[
             self.xs, self.ys]  # strict lower triangular values
         # edge_weight can be a learnable parameter, so it has to be constructed before forward()
@@ -129,10 +129,10 @@ class SymSimGCNNet(torch.nn.Module):
     def forward(self, data):
         batch_size = len(data.y)
         x, edge_index = data.x, data.edge_index
-        edge_weight = torch.zeros((self.num_nodes, self.num_nodes)).cuda()
+        edge_weight = torch.zeros((self.num_nodes, self.num_nodes)).to(edge_index.device)
         edge_weight[self.xs, self.ys] = self.edge_weight
-        edge_weight = edge_weight + edge_weight.transpose(1, 0) - torch.diag(
-            edge_weight.diagonal())  # copy values from lower tri to upper tri
+        edge_weight = edge_weight + edge_weight.transpose(1, 0) + torch.diag(
+            torch.ones(self.num_nodes, device=edge_index.device))
         # edge_weight [batch_size*num_nodes*num_nodes,]
         edge_weight = edge_weight.reshape(-1).repeat(batch_size)
         x = F.relu(self.conv1(x, edge_index, edge_weight))
