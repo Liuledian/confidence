@@ -187,7 +187,7 @@ def train_RGNN_for_all():
     n_epochs = 1000
     batch_size = 16
     K = 2
-    z_dim = 5
+    z_dim = 5  # 10 15 20
     dropout = 0.7
     label_type = "hard"
     adj_type = "uniform"

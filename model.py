@@ -122,6 +122,7 @@ class SymSimGCNNet(torch.nn.Module):
         self.dropout = dropout
         self.conv1 = NewSGConv(num_features=num_features, num_classes=num_hiddens[0], K=K)
         self.fc = nn.Linear(num_hiddens[0], num_classes)
+        self.bn = nn.BatchNorm1d(num_features)
         if self.domain_adaptation in ["RevGrad"]:
             self.domain_classifier = nn.Linear(num_hiddens[0], 2)
             self.alpha = None
@@ -129,6 +130,7 @@ class SymSimGCNNet(torch.nn.Module):
     def forward(self, data):
         batch_size = len(data.y)
         x, edge_index = data.x, data.edge_index
+        x = self.bn(x)
         edge_weight = torch.zeros((self.num_nodes, self.num_nodes)).to(edge_index.device)
         edge_weight[self.xs, self.ys] = self.edge_weight
         edge_weight = edge_weight + edge_weight.transpose(1, 0) + torch.diag(
