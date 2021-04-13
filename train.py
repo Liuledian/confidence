@@ -184,19 +184,19 @@ def format_list(ls):
 
 
 def train_RGNN_for_all():
-    n_epochs = 1000
-    batch_size = 16
+    n_epochs = args.n_epochs
+    batch_size = args.batch_size
     K = 2
-    z_dim = 5  # 10 15 20
-    dropout = 0.7
-    label_type = "hard"
-    adj_type = "uniform"
+    z_dim = args.z_dim  # 10 15 20
+    dropout = args.dropout
+    label_type = args.label_type
+    adj_type = args.adj_type
     learn_edge = True
-    domain_adaptation = None
-    lr = 0.001
-    lambda1 = 0.001
-    lambda2 = 0.001
-    lambda_dat = 0.001
+    domain_adaptation = args.domain_adaptation
+    lr = args.lr
+    lambda1 = args.l1
+    lambda2 = args.l2
+    lambda_dat = args.l_dat
     # Choose which tasks to run
     for task in tasks[0:1]:
         acc_all_sub = []

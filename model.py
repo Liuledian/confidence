@@ -137,7 +137,8 @@ class SymSimGCNNet(torch.nn.Module):
             torch.ones(self.num_nodes, device=edge_index.device))
         # edge_weight [batch_size*num_nodes*num_nodes,]
         edge_weight = edge_weight.reshape(-1).repeat(batch_size)
-        x = F.relu(self.conv1(x, edge_index, edge_weight))
+        # TODO Use different activation function
+        x = F.leaky_relu(self.conv1(x, edge_index, edge_weight))
 
         # domain classification
         domain_output = None
