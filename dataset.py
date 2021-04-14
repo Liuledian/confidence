@@ -49,6 +49,7 @@ class SubjectDependentDataset(InMemoryDataset):
             assert edge_index.shape[1] == n_channels * n_channels
             graph_data = Data(x=x, edge_index=edge_index, y=y)
             data_list.append(graph_data)
+
         print(len(data_list))
         if self.pre_filter is not None:
             data_list = [data for data in data_list if self.pre_filter(data)]

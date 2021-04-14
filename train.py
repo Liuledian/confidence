@@ -183,7 +183,7 @@ def format_list(ls):
     return result
 
 
-def train_RGNN_for_all():
+def train_RGNN_for_subject():
     n_epochs = args.n_epochs
     batch_size = args.batch_size
     K = 2
@@ -197,71 +197,65 @@ def train_RGNN_for_all():
     lambda1 = args.l1
     lambda2 = args.l2
     lambda_dat = args.l_dat
-    # Choose which tasks to run
-    for task in tasks[0:1]:
-        acc_all_sub = []
-        f1_all_sub = []
-        # Choose which subjects to run
-        for subject_name in subject_name_list[0:2]:
-            avg_acc_per_ep = np.zeros(n_epochs)
-            avg_f1_per_ep = np.zeros(n_epochs)
-            for fold in range(n_folds):
-                ckpt_save_name = None  # "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
-                ckpt_load = None
-                tr_dataset = SubjectDependentDataset(task, subject_name, fold, "train")
-                te_dataset = SubjectDependentDataset(task, subject_name, fold, "test")
-                acc_list, f1_list = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout,
-                                               adj_type, learn_edge, lambda1, lambda2, domain_adaptation, lambda_dat,
-                                               label_type, ckpt_save_name, ckpt_load)
 
-                logger.critical('-' * 100)
-                max_f1_idx = np.argmax(np.array(f1_list))
-                logger.critical("task: {:>10}; subject: {:>15}; fold: {}; epoch{}; acc {}; max f1{}".format(
-                    task, subject_name, fold, max_f1_idx + 1, acc_list[max_f1_idx], f1_list[max_f1_idx]))
-                # logger.critical(format_list(acc_list))
-                # logger.critical(format_list(f1_list))
-                logger.critical('-' * 100)
-                # Accumulate results of each fold
-                avg_acc_per_ep += np.array(acc_list)
-                avg_f1_per_ep += np.array(f1_list)
+    # Choose which task and subject to run
+    task = args.task
+    subject = args.subject
 
-            # log average metrics over all 5 folds
-            avg_acc_per_ep /= n_folds
-            avg_f1_per_ep /= n_folds
-            max_avg_acc_idx = np.argmax(avg_acc_per_ep)
-            max_avg_f1_idx = np.argmax(avg_f1_per_ep)
-            logger.critical('=' * 100)
-            logger.critical("task: {:>10}; subject: {:>15}; max acc: ({:4d}, {:9.5f}); max f1: ({:4d}, {:9.5f})"
-                            .format(task, subject_name, max_avg_acc_idx + 1, avg_acc_per_ep[max_avg_acc_idx],
-                                    max_avg_f1_idx + 1, avg_f1_per_ep[max_avg_f1_idx]))
-            logger.critical(format_list(avg_acc_per_ep))
-            logger.critical(format_list(avg_f1_per_ep))
-            logger.critical('=' * 100)
-            # record max avg metric of a subject
-            acc_all_sub.append(avg_acc_per_ep[max_avg_acc_idx])
-            f1_all_sub.append(avg_f1_per_ep[max_avg_f1_idx])
+    acc_per_fold = []
+    f1_per_fold = []
+    acc_per_fold_back = []
+    f1_per_fold_back = []
+    for fold in range(n_folds):
+        ckpt_save_name = None  # "{}_{}_{}_{}.ckpt".format(task, subject_name, fold, n_epochs)
+        ckpt_load = None
+        tr_dataset = SubjectDependentDataset(task, subject, fold, "train")
+        te_dataset = SubjectDependentDataset(task, subject, fold, "test")
+        acc_list, f1_list = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout,
+                                       adj_type, learn_edge, lambda1, lambda2, domain_adaptation, lambda_dat,
+                                       label_type, ckpt_save_name, ckpt_load)
 
-        # compute metrics over all subjects
-        acc_all_sub = np.array(acc_all_sub)
-        acc_mean = np.mean(acc_all_sub)
-        acc_std = np.std(acc_all_sub)
-        f1_all_sub = np.array(f1_all_sub)
-        f1_mean = np.mean(f1_all_sub)
-        f1_std = np.std(f1_all_sub)
-        # log average metrics over all subjects
-        logger.critical('*' * 100)
-        logger.critical("task: {:>10}; acc mean: {:9.5f}; acc_std {:9.5f}; f1 mean: {:9.5f}; f1 std: {:9.5f}"
-                        .format(task, acc_mean, acc_std, f1_mean, f1_std))
-        logger.critical(list(zip(acc_all_sub, f1_all_sub)))
-        logger.critical('*' * 100)
+        logger.critical('-' * 100)
+        max_f1_idx = np.argmax(np.array(f1_list))
+        max_acc_idx = np.argmax(np.array(acc_list))
+        logger.critical("task: {:>10}; subject: {:>15}; fold: {}; best f1 epoch{}; acc {}; f1{}".format(
+            task, subject, fold, max_f1_idx + 1, acc_list[max_f1_idx], f1_list[max_f1_idx]))
+        logger.critical("task: {:>10}; subject: {:>15}; fold: {}; best acc epoch{}; acc {}; f1{}".format(
+            task, subject, fold, max_acc_idx + 1, acc_list[max_acc_idx], f1_list[max_acc_idx]))
+
+        # Accumulate results of each fold
+        acc_per_fold.append(f1_list[max_f1_idx])
+        f1_per_fold.append(acc_list[max_f1_idx])
+        acc_per_fold_back.append(f1_list[max_acc_idx])
+        f1_per_fold_back.append(acc_list[max_acc_idx])
+
+    # Compute statistics over all 5 folds from f1
+    acc_per_fold = np.array(acc_per_fold)
+    f1_per_fold = np.array(f1_per_fold)
+    acc_avg, acc_std = np.mean(acc_per_fold), np.std(acc_per_fold)
+    f1_avg, f1_std = np.mean(f1_per_fold), np.std(f1_per_fold)
+
+    # Log average metrics over all 5 folds
+    logger.critical('=' * 100)
+    logger.critical("task: {:>10}; subject: {:>15}; select f1; acc: {:9.5f}/{:9.5f}; f1: {:9.5f}/{:9.5f}"
+                    .format(task, subject, acc_avg, acc_std, f1_avg, f1_std))
+
+    # Compute statistics over all 5 folds from acc
+    acc_per_fold_back = np.array(acc_per_fold_back)
+    f1_per_fold_back = np.array(f1_per_fold_back)
+    acc_avg, acc_std = np.mean(acc_per_fold_back), np.std(acc_per_fold_back)
+    f1_avg, f1_std = np.mean(f1_per_fold_back), np.std(f1_per_fold_back)
+
+    # Log average metrics over all 5 folds
+    logger.critical('=' * 100)
+    logger.critical("task: {:>10}; subject: {:>15}; select acc; acc: {:9.5f}/{:9.5f}; f1: {:9.5f}/{:9.5f}"
+                    .format(task, subject, acc_avg, acc_std, f1_avg, f1_std))
 
 
 if __name__ == '__main__':
     torch.manual_seed(seed_num)
-    # dropout_list = [0.7, 0.8, 0.9, 1.0]
-    # for i, dropout in enumerate(dropout_list):
-    #     if i % 2 == args.proc:
-    #         train_RGNN_for_all(dropout)
-    train_RGNN_for_all()
+    for z in [30, 40, 50, 60, 70, 80, 90]:
+        args.z_dim = z
+        train_RGNN_for_subject()
 
 
