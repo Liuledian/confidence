@@ -224,10 +224,10 @@ def train_RGNN_for_subject():
             task, subject, fold, max_acc_idx + 1, acc_list[max_acc_idx], f1_list[max_acc_idx]))
 
         # Accumulate results of each fold
-        acc_per_fold.append(f1_list[max_f1_idx])
-        f1_per_fold.append(acc_list[max_f1_idx])
-        acc_per_fold_back.append(f1_list[max_acc_idx])
-        f1_per_fold_back.append(acc_list[max_acc_idx])
+        acc_per_fold.append(acc_list[max_f1_idx])
+        f1_per_fold.append(f1_list[max_f1_idx])
+        acc_per_fold_back.append(acc_list[max_acc_idx])
+        f1_per_fold_back.append(f1_list[max_acc_idx])
 
     # Compute statistics over all 5 folds from f1
     acc_per_fold = np.array(acc_per_fold)
