@@ -213,11 +213,15 @@ def train_RGNN_for_all():
                 acc_list, f1_list = train_RGNN(tr_dataset, te_dataset, n_epochs, batch_size, lr, z_dim, K, dropout,
                                                adj_type, learn_edge, lambda1, lambda2, domain_adaptation, lambda_dat,
                                                label_type, ckpt_save_name, ckpt_load)
+
                 logger.critical('-' * 100)
-                logger.critical("task: {:>10}; subject: {:>15}; fold: {}".format(task, subject_name, fold))
-                logger.critical(format_list(acc_list))
-                logger.critical(format_list(f1_list))
+                max_f1_idx = np.argmax(np.array(f1_list))
+                logger.critical("task: {:>10}; subject: {:>15}; fold: {}; epoch{}; acc {}; max f1{}".format(
+                    task, subject_name, fold, max_f1_idx + 1, acc_list[max_f1_idx], f1_list[max_f1_idx]))
+                # logger.critical(format_list(acc_list))
+                # logger.critical(format_list(f1_list))
                 logger.critical('-' * 100)
+                # Accumulate results of each fold
                 avg_acc_per_ep += np.array(acc_list)
                 avg_f1_per_ep += np.array(f1_list)
 
@@ -259,4 +263,5 @@ if __name__ == '__main__':
     #     if i % 2 == args.proc:
     #         train_RGNN_for_all(dropout)
     train_RGNN_for_all()
+
 
