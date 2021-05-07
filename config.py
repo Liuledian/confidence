@@ -24,8 +24,8 @@ def get_logger():
 
 def get_args():
     parser = argparse.ArgumentParser(description='Confidence')
-    parser.add_argument('--task', type=str, default='animal')
-    parser.add_argument('--subject', type=str, default='wuxin')
+    parser.add_argument('--task', type=str, required=True)
+    parser.add_argument('--subject', type=str, required=True)
     parser.add_argument('--proc', type=int, required=True)
     parser.add_argument('--n_epochs', type=int, default=3000)
     parser.add_argument('--batch_size', type=int, default=16)

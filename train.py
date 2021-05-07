@@ -23,8 +23,9 @@ def distribution_label(labels, std=1):
             p = norm.pdf(x, y, std)
             soft_label_table[y] = np.exp(p) / np.sum(np.exp(p))
         print("generate soft_label_table")
+        print(soft_label_table)
 
-    t = torch.Tensor(soft_label_table)
+    t = torch.tensor(soft_label_table, dtype=torch.float, device=labels.device)
     return t[labels.long(), :]
 
 
@@ -218,9 +219,9 @@ def train_RGNN_for_subject():
         logger.critical('-' * 100)
         max_f1_idx = np.argmax(np.array(f1_list))
         max_acc_idx = np.argmax(np.array(acc_list))
-        logger.critical("task: {:>10}; subject: {:>15}; fold: {}; best f1 epoch{}; acc {}; f1{}".format(
+        logger.critical("task: {:>10}; subject: {:>15}; fold: {}; best f1  epoch: {:4d}; acc {:9.5f}; f1{:9.5f}".format(
             task, subject, fold, max_f1_idx + 1, acc_list[max_f1_idx], f1_list[max_f1_idx]))
-        logger.critical("task: {:>10}; subject: {:>15}; fold: {}; best acc epoch{}; acc {}; f1{}".format(
+        logger.critical("task: {:>10}; subject: {:>15}; fold: {}; best acc epoch: {:4d}; acc {:9.5f}; f1{:9.5f}".format(
             task, subject, fold, max_acc_idx + 1, acc_list[max_acc_idx], f1_list[max_acc_idx]))
 
         # Accumulate results of each fold
@@ -254,7 +255,7 @@ def train_RGNN_for_subject():
 
 if __name__ == '__main__':
     torch.manual_seed(seed_num)
-    for z in [30, 40, 50, 60, 70, 80, 90]:
+    for z in [20, 30, 40, 50]:
         args.z_dim = z
         train_RGNN_for_subject()
 
