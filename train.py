@@ -14,7 +14,7 @@ import torch
 soft_label_table = None
 
 
-def distribution_label(labels, std=1):
+def distribution_label(labels, std=0.5):
     global soft_label_table
     if soft_label_table is None:
         soft_label_table = np.zeros([5, 5])
